@@ -1,0 +1,8 @@
+__pycache__
+.vscode/*
+saved_models/indobert_finetuned
+saved_models/*
+saved_models
+/saved_models
+/saved_models/*
+/saved_models/
