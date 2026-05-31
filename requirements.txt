@@ -1,12 +1,8 @@
 pandas
 numpy
 scikit-learn
-nltk
 PySastrawi
-rapidfuzz
 transformers>=4.30.0
 torch>=2.0.0
-matplotlib
-seaborn
-tqdm
 accelerate
+streamlit
