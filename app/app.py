@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from predictor import LEVEL_LABELS, ModelPredictor
 from preprocessing import TextPreprocessor
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # project root
 ARCHIVE_DIR = os.path.join(BASE_DIR, "archive")
 MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
 
@@ -68,7 +68,7 @@ def render_label_box(pred: int, proba: list[float], labels: dict):
 st.title("🔍 Detektor Kata Kasar & Ujaran Kebencian")
 st.markdown(
     "**Indonesian Hate Speech & Abusive Language Detector** — "
-    "menggunakan Naive Bayes, Logistic Regression, dan IndoBERT"
+    "menggunakan Naive Bayes, Logistic Regression, SVM, dan IndoBERTweet"
 )
 st.markdown("---")
 
@@ -117,8 +117,9 @@ if analyze:
         preprocessed_plain = steps["normalized"]
         censored_text, found_abusive = preprocessor.censor_text(text_input)
 
-        nb_pred, nb_proba = predictor.predict_nb(preprocessed_stemmed)
-        lr_pred, lr_proba = predictor.predict_lr(preprocessed_stemmed)
+        nb_pred,   nb_proba   = predictor.predict_nb(preprocessed_stemmed)
+        lr_pred,   lr_proba   = predictor.predict_lr(preprocessed_stemmed)
+        svm_pred,  svm_proba  = predictor.predict_svm(preprocessed_stemmed)
         bert_pred, bert_proba = predictor.predict_bert(preprocessed_plain)
 
     st.markdown("---")
@@ -141,7 +142,7 @@ if analyze:
 
     # ── Model Predictions ───────────────────────────────────────────────────
     st.subheader("🤖 Hasil Prediksi Model")
-    col_nb, col_lr, col_bert = st.columns(3)
+    col_nb, col_lr, col_svm, col_bert = st.columns(4)
 
     with col_nb:
         st.markdown('<p class="model-header">Naive Bayes</p>', unsafe_allow_html=True)
@@ -151,13 +152,17 @@ if analyze:
         st.markdown('<p class="model-header">Logistic Regression</p>', unsafe_allow_html=True)
         render_label_box(lr_pred, lr_proba, LEVEL_LABELS)
 
+    with col_svm:
+        st.markdown('<p class="model-header">SVM (LinearSVC)</p>', unsafe_allow_html=True)
+        render_label_box(svm_pred, svm_proba, LEVEL_LABELS)
+
     with col_bert:
-        st.markdown('<p class="model-header">IndoBERT (Fine-tuned)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="model-header">IndoBERTweet (Fine-tuned)</p>', unsafe_allow_html=True)
         render_label_box(bert_pred, bert_proba, LEVEL_LABELS)
 
     # ── Consensus ───────────────────────────────────────────────────────────
     st.markdown("---")
-    votes = [nb_pred, lr_pred, bert_pred]
+    votes = [nb_pred, lr_pred, svm_pred, bert_pred]
     consensus = max(set(votes), key=votes.count)
     c_label, c_en, c_color = LEVEL_LABELS.get(consensus, (str(consensus), str(consensus), "#6c757d"))
 
@@ -165,7 +170,7 @@ if analyze:
     st.markdown(
         f"""<div class="label-box" style="background:{c_color}18; border:2px solid {c_color}; max-width:400px; margin:auto;">
         <h2 style="color:{c_color};">{c_label}</h2>
-        <p>{c_en} — voting dari 3 model</p></div>""",
+        <p>{c_en} — voting dari 4 model</p></div>""",
         unsafe_allow_html=True,
     )
 
@@ -188,7 +193,7 @@ if analyze:
                 f"- **Level {lvl} — {id_}** ({en})"
             )
         st.markdown(
-            "_Model klasikal (NB, LR) dan IndoBERT dilatih pada dataset multi-label "
+            "_Model klasikal (NB, LR, SVM) dan IndoBERTweet dilatih pada dataset multi-label "
             "hate speech dan abusive language Twitter berbahasa Indonesia "
             "([Ibrohim & Budi, 2019](https://www.aclweb.org/anthology/W19-3506.pdf))._"
         )
