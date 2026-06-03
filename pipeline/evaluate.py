@@ -1,0 +1,188 @@
+"""
+Load all saved models and produce evaluation outputs:
+  - Per-model classification reports
+  - confusion_matrices.png
+  - model_comparison.png
+
+Usage:
+    python evaluate.py
+
+Reads:  dataset_processed.csv, saved_models/
+"""
+
+import os
+import pickle
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import torch
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, logging as hf_logging
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    f1_score, precision_score, recall_score,
+    classification_report, confusion_matrix,
+)
+from sklearn.utils import resample
+from tqdm.auto import tqdm
+
+from config import (
+    OUTPUT_PATH, BERT_SAVE_PATH, OUTPUTS_DIR,
+    LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
+    TEST_SIZE, RANDOM_STATE, MAX_LEN, BATCH_SIZE, device,
+)
+from train_bert import ProfanityDataset
+
+hf_logging.set_verbosity_error()
+
+
+def load_test_split():
+    df = pd.read_csv(OUTPUT_PATH)
+    df = df.dropna(subset=['Kalimat Dinormalisasi', 'Kalimat Bert'])
+    df = df[(df['Kalimat Dinormalisasi'].str.strip() != '') &
+            (df['Kalimat Bert'].str.strip() != '')].reset_index(drop=True)
+
+    X_ml   = df['Kalimat Dinormalisasi']
+    X_bert = df['Kalimat Bert']
+    y      = df['Level Kata Kasar']
+
+    _, X_test_ml, _, X_test_bert, _, y_test = train_test_split(
+        X_ml, X_bert, y,
+        test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y,
+    )
+    return X_test_ml.reset_index(drop=True), X_test_bert.reset_index(drop=True), y_test.reset_index(drop=True)
+
+
+def predict_classical(X_test_ml):
+    with open(LR_TFIDF_PATH,  'rb') as f: tfidf_lr  = pickle.load(f)
+    with open(NB_TFIDF_PATH,  'rb') as f: tfidf_nb  = pickle.load(f)
+    with open(LR_MODEL_PATH,  'rb') as f: lr_model  = pickle.load(f)
+    with open(NB_MODEL_PATH,  'rb') as f: nb_model  = pickle.load(f)
+    with open(SVM_MODEL_PATH, 'rb') as f: svm_model = pickle.load(f)
+
+    X_lr = tfidf_lr.transform(X_test_ml)
+    X_nb = tfidf_nb.transform(X_test_ml)
+
+    return (lr_model.predict(X_lr),
+            nb_model.predict(X_nb),
+            svm_model.predict(X_lr))
+
+
+def predict_bert(X_test_bert, y_test):
+    tokenizer = AutoTokenizer.from_pretrained(BERT_SAVE_PATH)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        BERT_SAVE_PATH, num_labels=4, ignore_mismatched_sizes=True,
+    ).to(device)
+    model.eval()
+
+    test_ds = ProfanityDataset(X_test_bert, y_test, tokenizer, max_len=MAX_LEN)
+    loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+
+    preds = []
+    with torch.no_grad():
+        for batch in tqdm(loader, desc='BERT inference'):
+            out = model(
+                input_ids=batch['input_ids'].to(device),
+                attention_mask=batch['attention_mask'].to(device),
+            )
+            preds.extend(torch.argmax(out.logits, dim=1).cpu().numpy())
+    return np.array(preds)
+
+
+def plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_bert,
+                            f1_lr, f1_nb, f1_svm, f1_bert):
+    fig, axes = plt.subplots(1, 4, figsize=(22, 5))
+    specs = [
+        (y_test, y_pred_lr,   f'Logistic Regression\nF1={f1_lr:.4f}'),
+        (y_test, y_pred_nb,   f'Naive Bayes\nF1={f1_nb:.4f}'),
+        (y_test, y_pred_svm,  f'SVM (LinearSVC)\nF1={f1_svm:.4f}'),
+        (y_test, y_pred_bert, f'IndoBERT\nF1={f1_bert:.4f}'),
+    ]
+    for ax, (yt, yp, title) in zip(axes, specs):
+        cm = confusion_matrix(yt, yp, labels=[0, 1, 2, 3])
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
+                    xticklabels=['L0', 'L1', 'L2', 'L3'],
+                    yticklabels=['L0', 'L1', 'L2', 'L3'])
+        ax.set_title(title, fontweight='bold')
+        ax.set_ylabel('True')
+        ax.set_xlabel('Predicted')
+    plt.suptitle('Confusion Matrices – Perbandingan Model',
+                 fontsize=14, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    os.makedirs(OUTPUTS_DIR, exist_ok=True)
+    out_path = os.path.join(OUTPUTS_DIR, 'confusion_matrices.png')
+    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    print(f'Saved → {out_path}')
+    plt.show()
+
+
+def plot_model_comparison(results: pd.DataFrame):
+    fig, ax = plt.subplots(figsize=(11, 5))
+    x = np.arange(len(results))
+    w = 0.25
+    bars = [
+        ax.bar(x - w, results['Precision (macro)'], w, label='Precision', color='#3498db'),
+        ax.bar(x,     results['Recall (macro)'],    w, label='Recall',    color='#2ecc71'),
+        ax.bar(x + w, results['F1 (macro)'],        w, label='F1 (macro)',color='#e74c3c'),
+    ]
+    ax.set_xticks(x)
+    ax.set_xticklabels(results.index)
+    ax.set_ylim(0, 1.05)
+    ax.set_ylabel('Score')
+    ax.set_title('Perbandingan Performa Model', fontweight='bold')
+    ax.legend()
+    for bar_group in bars:
+        for bar in bar_group:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, h + 0.005,
+                    f'{h:.3f}', ha='center', va='bottom', fontsize=8)
+    plt.tight_layout()
+    out_path = os.path.join(OUTPUTS_DIR, 'model_comparison.png')
+    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    print(f'Saved → {out_path}')
+    plt.show()
+
+
+if __name__ == '__main__':
+    X_test_ml, X_test_bert, y_test = load_test_split()
+
+    y_pred_lr, y_pred_nb, y_pred_svm = predict_classical(X_test_ml)
+    y_pred_bert = predict_bert(X_test_bert, y_test)
+
+    f1_lr   = f1_score(y_test, y_pred_lr,   average='macro')
+    f1_nb   = f1_score(y_test, y_pred_nb,   average='macro')
+    f1_svm  = f1_score(y_test, y_pred_svm,  average='macro')
+    f1_bert = f1_score(y_test, y_pred_bert, average='macro')
+
+    print('\n=== Classification Reports ===')
+    for name, yt, yp in [
+        ('Logistic Regression', y_test, y_pred_lr),
+        ('Naive Bayes',          y_test, y_pred_nb),
+        ('SVM (LinearSVC)',      y_test, y_pred_svm),
+        ('IndoBERT',             y_test, y_pred_bert),
+    ]:
+        print(f'\n--- {name} ---')
+        print(classification_report(yt, yp,
+              target_names=['Level 0', 'Level 1', 'Level 2', 'Level 3']))
+
+    def get_metrics(yt, yp):
+        return {
+            'Precision (macro)': precision_score(yt, yp, average='macro', zero_division=0),
+            'Recall (macro)':    recall_score(yt, yp,    average='macro', zero_division=0),
+            'F1 (macro)':        f1_score(yt, yp,        average='macro', zero_division=0),
+        }
+
+    results = pd.DataFrame({
+        'Logistic Regression': get_metrics(y_test, y_pred_lr),
+        'Naive Bayes':         get_metrics(y_test, y_pred_nb),
+        'SVM (LinearSVC)':     get_metrics(y_test, y_pred_svm),
+        'IndoBERT':            get_metrics(y_test, y_pred_bert),
+    }).T.round(4)
+
+    print('\n=== Model Comparison ===')
+    print(results.to_string())
+
+    plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_bert,
+                            f1_lr, f1_nb, f1_svm, f1_bert)
+    plot_model_comparison(results)

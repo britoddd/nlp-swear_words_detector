@@ -26,6 +26,8 @@ class ModelPredictor:
             self.nb_model = pickle.load(f)
         with open(os.path.join(models_dir, "nb_tfidf.pkl"), "rb") as f:
             self.nb_tfidf = pickle.load(f)
+        with open(os.path.join(models_dir, "svm_model.pkl"), "rb") as f:
+            self.svm_model = pickle.load(f)
 
     def _load_bert(self, bert_path: str):
         self.tokenizer = AutoTokenizer.from_pretrained(bert_path)
@@ -44,6 +46,12 @@ class ModelPredictor:
         features = self.nb_tfidf.transform([text])
         pred = int(self.nb_model.predict(features)[0])
         proba = self.nb_model.predict_proba(features)[0].tolist()
+        return pred, proba
+
+    def predict_svm(self, text: str) -> tuple[int, list[float]]:
+        features = self.lr_tfidf.transform([text])  # SVM shares LR's TF-IDF
+        pred = int(self.svm_model.predict(features)[0])
+        proba = self.svm_model.predict_proba(features)[0].tolist()
         return pred, proba
 
     def predict_bert(self, text: str) -> tuple[int, list[float]]:
