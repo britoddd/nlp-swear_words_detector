@@ -19,39 +19,43 @@ import seaborn as sns
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, logging as hf_logging
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     f1_score, precision_score, recall_score,
     classification_report, confusion_matrix,
 )
-from sklearn.utils import resample
 from tqdm.auto import tqdm
 
 from config import (
     OUTPUT_PATH, BERT_SAVE_PATH, OUTPUTS_DIR,
     LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
-    TEST_SIZE, RANDOM_STATE, MAX_LEN, BATCH_SIZE, device,
+    MAX_LEN, BATCH_SIZE, device,
 )
+from data_loader import make_splits
 from train_bert import ProfanityDataset
 
 hf_logging.set_verbosity_error()
 
 
 def load_test_split():
+    from preprocess_pipeline import preprocess
     df = pd.read_csv(OUTPUT_PATH)
-    df = df.dropna(subset=['Kalimat Dinormalisasi', 'Kalimat Bert'])
-    df = df[(df['Kalimat Dinormalisasi'].str.strip() != '') &
-            (df['Kalimat Bert'].str.strip() != '')].reset_index(drop=True)
+    df = df.dropna(subset=['Kalimat Asli', 'Kalimat Dinormalisasi'])
+    df = df[df['Kalimat Dinormalisasi'].str.strip() != ''].reset_index(drop=True)
+
+    # Kalimat Bert is not stored in the CSV — regenerate it (no stemming, no slang norm)
+    tqdm.pandas(desc='Regenerating BERT input')
+    df['Kalimat Bert'] = df['Kalimat Asli'].progress_apply(
+        lambda x: preprocess(x, for_bert=True)
+    )
+    df = df[df['Kalimat Bert'].str.strip() != ''].reset_index(drop=True)
 
     X_ml   = df['Kalimat Dinormalisasi']
     X_bert = df['Kalimat Bert']
     y      = df['Level Kata Kasar']
 
-    _, X_test_ml, _, X_test_bert, _, y_test = train_test_split(
-        X_ml, X_bert, y,
-        test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y,
-    )
-    return X_test_ml.reset_index(drop=True), X_test_bert.reset_index(drop=True), y_test.reset_index(drop=True)
+    # Use same make_splits() as training scripts — guarantees identical test set
+    _, _, X_test_ml, _, _, X_test_bert, _, _, y_test = make_splits(X_ml, y, X_bert)
+    return X_test_ml, X_test_bert, y_test
 
 
 def predict_classical(X_test_ml):
