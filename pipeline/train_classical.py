@@ -7,12 +7,15 @@ Usage:
 Reads:  dataset_processed.csv  (produced by preprocess_pipeline.py)
 Writes: saved_models/lr_model.pkl, lr_tfidf.pkl, nb_model.pkl,
         nb_tfidf.pkl, svm_model.pkl
+        logs/classical_training.log
 """
 
+import logging
 import os
 import pickle
 import pandas as pd
-from sklearn.model_selection import train_test_split
+import optuna
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import ComplementNB
@@ -24,8 +27,30 @@ from sklearn.utils import resample
 from config import (
     OUTPUT_PATH, MODELS_DIR, FORCE_RETRAIN,
     LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
-    TEST_SIZE, RANDOM_STATE,
+    TEST_SIZE, RANDOM_STATE, N_TRIALS,
 )
+
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_LOGS_DIR = os.path.join(_ROOT, 'logs')
+os.makedirs(_LOGS_DIR, exist_ok=True)
+
+_LOG_PATH = os.path.join(_LOGS_DIR, 'classical_training.log')
+
+logger = logging.getLogger('classical_training')
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _fmt = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s',
+                             datefmt='%Y-%m-%d %H:%M:%S')
+    _fh = logging.FileHandler(_LOG_PATH, encoding='utf-8')
+    _fh.setFormatter(_fmt)
+    _ch = logging.StreamHandler()
+    _ch.setFormatter(_fmt)
+    logger.addHandler(_fh)
+    logger.addHandler(_ch)
+
+_TARGET_NAMES = ['Level 0', 'Level 1', 'Level 2', 'Level 3']
 
 
 def random_oversample(X_ser: pd.Series, y_ser: pd.Series,
@@ -58,7 +83,7 @@ def load_splits():
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
     )
     X_train, y_train = random_oversample(X_train, y_train, random_state=RANDOM_STATE)
-    print(f'Train: {len(y_train):,} (after oversampling) | Test: {len(y_test):,}')
+    logger.info(f'Data loaded | train={len(y_train):,} (after oversampling) | test={len(y_test):,}')
     return X_train, X_test, y_train, y_test
 
 
@@ -76,60 +101,173 @@ def build_tfidf_features(X_train, X_test):
     return tfidf_lr, tfidf_nb, X_train_lr, X_test_lr, X_train_nb, X_test_nb
 
 
+# ── Hyperparameter tuning ──────────────────────────────────────────────────────
+
+def tune_lr(X_train, y_train) -> dict:
+    logger.info(f'LR: starting hyperparameter tuning ({N_TRIALS} trials)')
+
+    def objective(trial):
+        C = trial.suggest_float('C', 1e-3, 100.0, log=True)
+        solver = trial.suggest_categorical('solver', ['lbfgs', 'saga'])
+        model = LogisticRegression(
+            C=C, solver=solver, max_iter=1000,
+            random_state=RANDOM_STATE, class_weight='balanced',
+        )
+        val_scores = cross_val_score(model, X_train, y_train,
+                                     cv=3, scoring='f1_macro', n_jobs=-1)
+        val_f1 = val_scores.mean()
+        model.fit(X_train, y_train)
+        train_f1 = f1_score(y_train, model.predict(X_train), average='macro')
+        logger.info(
+            f'LR | trial {trial.number:>3d} | params={trial.params} '
+            f'| train_F1={train_f1:.4f} | val_CV_F1={val_f1:.4f}'
+        )
+        return val_f1
+
+    study = optuna.create_study(direction='maximize',
+                                sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
+    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=False)
+    logger.info(
+        f'LR BEST | params={study.best_params} | val_CV_F1={study.best_value:.4f}'
+    )
+    return study.best_params
+
+
+def tune_nb(X_train, y_train) -> dict:
+    logger.info(f'NB: starting hyperparameter tuning ({N_TRIALS} trials)')
+
+    def objective(trial):
+        alpha = trial.suggest_float('alpha', 1e-3, 10.0, log=True)
+        norm  = trial.suggest_categorical('norm', [True, False])
+        model = ComplementNB(alpha=alpha, norm=norm)
+        val_scores = cross_val_score(model, X_train, y_train,
+                                     cv=3, scoring='f1_macro', n_jobs=-1)
+        val_f1 = val_scores.mean()
+        model.fit(X_train, y_train)
+        train_f1 = f1_score(y_train, model.predict(X_train), average='macro')
+        logger.info(
+            f'NB | trial {trial.number:>3d} | params={trial.params} '
+            f'| train_F1={train_f1:.4f} | val_CV_F1={val_f1:.4f}'
+        )
+        return val_f1
+
+    study = optuna.create_study(direction='maximize',
+                                sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
+    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=False)
+    logger.info(
+        f'NB BEST | params={study.best_params} | val_CV_F1={study.best_value:.4f}'
+    )
+    return study.best_params
+
+
+def tune_svm(X_train, y_train) -> dict:
+    logger.info(f'SVM: starting hyperparameter tuning ({N_TRIALS} trials)')
+
+    def objective(trial):
+        C = trial.suggest_float('C', 1e-3, 100.0, log=True)
+        model = CalibratedClassifierCV(
+            LinearSVC(C=C, max_iter=2000,
+                      class_weight='balanced', random_state=RANDOM_STATE),
+            cv=3,
+        )
+        val_scores = cross_val_score(model, X_train, y_train,
+                                     cv=3, scoring='f1_macro', n_jobs=-1)
+        val_f1 = val_scores.mean()
+        model.fit(X_train, y_train)
+        train_f1 = f1_score(y_train, model.predict(X_train), average='macro')
+        logger.info(
+            f'SVM | trial {trial.number:>3d} | params={trial.params} '
+            f'| train_F1={train_f1:.4f} | val_CV_F1={val_f1:.4f}'
+        )
+        return val_f1
+
+    study = optuna.create_study(direction='maximize',
+                                sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
+    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=False)
+    logger.info(
+        f'SVM BEST | params={study.best_params} | val_CV_F1={study.best_value:.4f}'
+    )
+    return study.best_params
+
+
+# ── Model training ─────────────────────────────────────────────────────────────
+
+def _log_metrics(model_name: str, split: str, y_true, y_pred):
+    f1 = f1_score(y_true, y_pred, average='macro')
+    report = classification_report(y_true, y_pred, target_names=_TARGET_NAMES)
+    logger.info(f'{model_name} | {split} | macro_F1={f1:.4f}')
+    logger.info(f'{model_name} | {split} | classification report:\n{report}')
+    return f1
+
+
 def train_lr(X_train, y_train, X_test, y_test):
+    logger.info('=' * 60)
+    logger.info('LR: training start')
     if not FORCE_RETRAIN and os.path.exists(LR_MODEL_PATH):
-        print('LR: loading from disk')
+        logger.info('LR: loading from disk')
         with open(LR_MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
+        best = None
     else:
-        print('LR: training...')
-        model = LogisticRegression(max_iter=1000, C=1.0, solver='lbfgs',
-                                   random_state=RANDOM_STATE, class_weight='balanced')
+        best = tune_lr(X_train, y_train)
+        logger.info(f'LR: training final model with best params={best}')
+        model = LogisticRegression(
+            max_iter=1000, random_state=RANDOM_STATE, class_weight='balanced',
+            **best,
+        )
         model.fit(X_train, y_train)
 
+    _log_metrics('LR', 'TRAIN', y_train, model.predict(X_train))
     y_pred = model.predict(X_test)
-    f1 = f1_score(y_test, y_pred, average='macro')
-    print(f'LR  F1 (macro): {f1:.4f}')
-    print(classification_report(y_test, y_pred,
-          target_names=['Level 0', 'Level 1', 'Level 2', 'Level 3']))
+    _log_metrics('LR', 'TEST', y_test, y_pred)
+    if best:
+        logger.info(f'LR SUMMARY | best_params={best}')
     return model, y_pred
 
 
 def train_nb(X_train, y_train, X_test, y_test):
+    logger.info('=' * 60)
+    logger.info('NB: training start')
     if not FORCE_RETRAIN and os.path.exists(NB_MODEL_PATH):
-        print('NB: loading from disk')
+        logger.info('NB: loading from disk')
         with open(NB_MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
+        best = None
     else:
-        print('NB: training...')
-        model = ComplementNB(alpha=0.1)
+        best = tune_nb(X_train, y_train)
+        logger.info(f'NB: training final model with best params={best}')
+        model = ComplementNB(**best)
         model.fit(X_train, y_train)
 
+    _log_metrics('NB', 'TRAIN', y_train, model.predict(X_train))
     y_pred = model.predict(X_test)
-    f1 = f1_score(y_test, y_pred, average='macro')
-    print(f'NB  F1 (macro): {f1:.4f}')
-    print(classification_report(y_test, y_pred,
-          target_names=['Level 0', 'Level 1', 'Level 2', 'Level 3']))
+    _log_metrics('NB', 'TEST', y_test, y_pred)
+    if best:
+        logger.info(f'NB SUMMARY | best_params={best}')
     return model, y_pred
 
 
 def train_svm(X_train, y_train, X_test, y_test):
+    logger.info('=' * 60)
+    logger.info('SVM: training start')
     if not FORCE_RETRAIN and os.path.exists(SVM_MODEL_PATH):
-        print('SVM: loading from disk')
+        logger.info('SVM: loading from disk')
         with open(SVM_MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
+        best = None
     else:
-        print('SVM: training...')
-        svm_base = LinearSVC(C=1.0, max_iter=2000,
-                             class_weight='balanced', random_state=RANDOM_STATE)
+        best = tune_svm(X_train, y_train)
+        logger.info(f'SVM: training final model with best params={best}')
+        svm_base = LinearSVC(max_iter=2000, class_weight='balanced',
+                             random_state=RANDOM_STATE, **best)
         model = CalibratedClassifierCV(svm_base, cv=5)
         model.fit(X_train, y_train)
 
+    _log_metrics('SVM', 'TRAIN', y_train, model.predict(X_train))
     y_pred = model.predict(X_test)
-    f1 = f1_score(y_test, y_pred, average='macro')
-    print(f'SVM F1 (macro): {f1:.4f}')
-    print(classification_report(y_test, y_pred,
-          target_names=['Level 0', 'Level 1', 'Level 2', 'Level 3']))
+    _log_metrics('SVM', 'TEST', y_test, y_pred)
+    if best:
+        logger.info(f'SVM SUMMARY | best_params={best}')
     return model, y_pred
 
 
@@ -144,10 +282,12 @@ def save_models(lr_model, tfidf_lr, nb_model, tfidf_nb, svm_model):
     ]:
         with open(path, 'wb') as f:
             pickle.dump(obj, f)
-    print(f'Models saved to {MODELS_DIR}/')
+    logger.info(f'Models saved to {MODELS_DIR}/')
 
 
 if __name__ == '__main__':
+    logger.info('=' * 60)
+    logger.info('Classical training session started')
     X_train, X_test, y_train, y_test = load_splits()
     tfidf_lr, tfidf_nb, X_train_lr, X_test_lr, X_train_nb, X_test_nb = \
         build_tfidf_features(X_train, X_test)
@@ -157,3 +297,5 @@ if __name__ == '__main__':
     svm_model, y_pred_svm = train_svm(X_train_lr, y_train, X_test_lr,  y_test)
 
     save_models(lr_model, tfidf_lr, nb_model, tfidf_nb, svm_model)
+    logger.info('=' * 60)
+    logger.info(f'Classical training session complete. Log: {_LOG_PATH}')

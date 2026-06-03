@@ -1,7 +1,8 @@
 """Load the raw dataset, apply label mapping, and return a clean DataFrame."""
 
 import pandas as pd
-from config import DATA_PATH, ABUSIVE_PATH, SLANG_PATH
+from sklearn.model_selection import train_test_split
+from config import DATA_PATH, ABUSIVE_PATH, SLANG_PATH, RANDOM_STATE
 
 
 def map_to_level(row) -> int:
@@ -39,6 +40,41 @@ def load_lexicons() -> tuple[list, dict]:
     print(f'Abusive lexicon: {len(abusive_word_list)} words')
     print(f'Slang dictionary: {len(slang_dict)} entries')
     return abusive_word_list, slang_dict
+
+
+def make_splits(X_ml: pd.Series, y: pd.Series, X_bert: pd.Series = None):
+    """
+    Deterministic 80/10/10 stratified split → (train, val, test).
+
+    First splits 80% train / 20% temp, then splits temp 50/50 into val and test.
+    Oversampling must be applied by the caller on the returned train split only.
+
+    Without X_bert → returns (X_train_ml, X_val_ml, X_test_ml, y_train, y_val, y_test)
+    With    X_bert → returns same + (X_train_bert, X_val_bert, X_test_bert) inserted after X_test_ml
+    """
+    if X_bert is not None:
+        X_tr_ml, X_tmp_ml, X_tr_bert, X_tmp_bert, y_tr, y_tmp = train_test_split(
+            X_ml, X_bert, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y,
+        )
+        X_val_ml, X_test_ml, X_val_bert, X_test_bert, y_val, y_test = train_test_split(
+            X_tmp_ml, X_tmp_bert, y_tmp, test_size=0.5, random_state=RANDOM_STATE, stratify=y_tmp,
+        )
+        return (
+            X_tr_ml.reset_index(drop=True),   X_val_ml.reset_index(drop=True),   X_test_ml.reset_index(drop=True),
+            X_tr_bert.reset_index(drop=True), X_val_bert.reset_index(drop=True), X_test_bert.reset_index(drop=True),
+            y_tr.reset_index(drop=True),      y_val.reset_index(drop=True),      y_test.reset_index(drop=True),
+        )
+    else:
+        X_tr_ml, X_tmp_ml, y_tr, y_tmp = train_test_split(
+            X_ml, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y,
+        )
+        X_val_ml, X_test_ml, y_val, y_test = train_test_split(
+            X_tmp_ml, y_tmp, test_size=0.5, random_state=RANDOM_STATE, stratify=y_tmp,
+        )
+        return (
+            X_tr_ml.reset_index(drop=True),  X_val_ml.reset_index(drop=True),  X_test_ml.reset_index(drop=True),
+            y_tr.reset_index(drop=True),     y_val.reset_index(drop=True),     y_test.reset_index(drop=True),
+        )
 
 
 if __name__ == '__main__':

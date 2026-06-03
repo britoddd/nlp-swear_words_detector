@@ -26,13 +26,17 @@ SVM_MODEL_PATH    = os.path.join(_ROOT, 'saved_models', 'svm_model.pkl')
 MAX_SAMPLES    = None   # set to int (e.g. 3000) for faster testing
 MAX_LEN        = 128
 BATCH_SIZE     = 16
-EPOCHS         = 3
-LEARNING_RATE  = 2e-5
+EPOCHS         = 10    # epochs for final training run after tuning
+LEARNING_RATE  = 2e-5  # fallback if tuning is skipped
 RANDOM_STATE   = 42
 TEST_SIZE      = 0.2
 
+# ── Hyperparameter tuning (Optuna) ─────────────────────────────
+N_TRIALS       = 10    # number of Optuna trials
+TRIAL_EPOCHS   = 3     # epochs per trial (keep short for speed)
+
 # ── Runtime flags ──────────────────────────────────────────────
 # Set True to retrain even when saved artefacts already exist
-FORCE_RETRAIN  = False
+FORCE_RETRAIN  = True
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
