@@ -59,7 +59,7 @@ class ModelPredictor:
             text,
             return_tensors="pt",
             truncation=True,
-            max_length=512,
+            max_length=128,  # match MAX_LEN used during fine-tuning
             padding=True,
         )
         inputs = {k: v.to(self.device) for k, v in inputs.items()}

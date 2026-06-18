@@ -113,14 +113,14 @@ if analyze:
 
     with st.spinner("Menganalisis..."):
         steps = preprocessor.get_preprocessing_steps(text_input)
-        preprocessed_stemmed = steps["stemmed"]
-        preprocessed_plain = steps["normalized"]
+        classical_input = steps["classical_input"]  # matches 'Kalimat Dinormalisasi' in training
+        bert_input = steps["bert_input"]             # matches 'Kalimat Bert' in training
         censored_text, found_abusive = preprocessor.censor_text(text_input)
 
-        nb_pred,   nb_proba   = predictor.predict_nb(preprocessed_stemmed)
-        lr_pred,   lr_proba   = predictor.predict_lr(preprocessed_stemmed)
-        svm_pred,  svm_proba  = predictor.predict_svm(preprocessed_stemmed)
-        bert_pred, bert_proba = predictor.predict_bert(preprocessed_plain)
+        nb_pred,   nb_proba   = predictor.predict_nb(classical_input)
+        lr_pred,   lr_proba   = predictor.predict_lr(classical_input)
+        svm_pred,  svm_proba  = predictor.predict_svm(classical_input)
+        bert_pred, bert_proba = predictor.predict_bert(bert_input)
 
     st.markdown("---")
 
@@ -130,9 +130,9 @@ if analyze:
         rows = [
             ("Teks Asli", steps["original"]),
             ("Lowercase", steps["lowercase"]),
-            ("Bersih (URL/mention/tanda baca)", steps["cleaned"]),
+            ("Bersih (leet & non-alfabet) — input IndoBERT", steps["cleaned"]),
             ("Normalisasi Slang (kamusalay)", steps["normalized"]),
-            ("Stemming (Sastrawi)", steps["stemmed"]),
+            ("Stemming (Sastrawi) — input klasikal", steps["stemmed"]),
         ]
         for label, val in rows:
             st.markdown(

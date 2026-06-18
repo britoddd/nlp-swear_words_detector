@@ -114,13 +114,18 @@ def preprocess(text: str, for_bert: bool = False) -> str:
 # ── Dataset-level application ──────────────────────────────────
 
 def apply_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
-    """Add Kalimat Asli, Kalimat Dinormalisasi, Kalimat Bert, Disamarkan columns."""
+    """Add Kalimat Asli, Kalimat Dinormalisasi, and Disamarkan columns.
+
+    'Kalimat Bert' is intentionally NOT stored — it is regenerated on demand by
+    the trainers/evaluator (see their load_splits) directly from 'Kalimat Asli'.
+    """
     df = df.copy()
     df['Kalimat Asli'] = df['Tweet'].astype(str)
     tqdm.pandas(desc='Preprocessing for ML')
     df['Kalimat Dinormalisasi'] = df['Kalimat Asli'].progress_apply(
         lambda x: preprocess(x, for_bert=False)
     )
+    df['Disamarkan'] = df['Kalimat Asli'].apply(detect_disguise)
     return df
 
 

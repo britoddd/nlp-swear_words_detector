@@ -32,8 +32,9 @@ RANDOM_STATE   = 42
 TEST_SIZE      = 0.2
 
 # ── Hyperparameter tuning (Optuna) ─────────────────────────────
-N_TRIALS       = 10    # number of Optuna trials
-TRIAL_EPOCHS   = 3     # epochs per trial (keep short for speed)
+N_TRIALS           = 10    # Optuna trials for BERT and the classical resampling-strategy comparisons
+N_TRIALS_CLASSICAL = 100   # Optuna trials for the main classical trainer (train_classical.py)
+TRIAL_EPOCHS       = 3     # epochs per trial (keep short for speed)
 
 # ── Runtime flags ──────────────────────────────────────────────
 # Set True to retrain even when saved artefacts already exist

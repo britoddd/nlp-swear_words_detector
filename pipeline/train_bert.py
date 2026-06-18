@@ -328,8 +328,10 @@ def main():
     if not FORCE_RETRAIN and os.path.exists(BERT_SAVE_PATH):
         print(f'Loading fine-tuned weights from {BERT_SAVE_PATH}')
         print('Set FORCE_RETRAIN=True in config.py to retrain.')
+        # Already-fine-tuned 4-label weights — surface a mismatch instead of
+        # silently reinitialising the classifier head.
         model = AutoModelForSequenceClassification.from_pretrained(
-            BERT_SAVE_PATH, num_labels=4, ignore_mismatched_sizes=True,
+            BERT_SAVE_PATH, num_labels=4,
         ).to(device)
         test_loader = _make_loader(X_test, y_test, tokenizer, shuffle=False)
         print('\n=== TEST SET RESULTS (held-out) ===')

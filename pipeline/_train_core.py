@@ -7,19 +7,21 @@ import os
 import pickle
 import optuna
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import ComplementNB
 from sklearn.svm import LinearSVC
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import f1_score, classification_report
 import pandas as pd
+from tqdm.auto import tqdm
 
 from config import (
     OUTPUT_PATH, MODELS_DIR, FORCE_RETRAIN,
     LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
-    TEST_SIZE, RANDOM_STATE, N_TRIALS,
+    RANDOM_STATE, N_TRIALS,
 )
+from data_loader import make_splits
 
 _ROOT     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOGS_DIR = os.path.join(_ROOT, 'logs')
@@ -46,22 +48,33 @@ def setup_logging(log_filename: str) -> str:
 
 
 def load_splits():
+    """80/10/10 stratified split, identical row population and partitioning to
+    train_bert.py and evaluate.py so TEST metrics are computed on the same
+    held-out 10% the evaluator uses. See train_classical.load_splits for details.
+    """
+    from preprocess_pipeline import preprocess
+
     df = pd.read_csv(OUTPUT_PATH)
-    df = df.dropna(subset=['Kalimat Dinormalisasi'])
+    df = df.dropna(subset=['Kalimat Asli', 'Kalimat Dinormalisasi'])
     df = df[df['Kalimat Dinormalisasi'].str.strip() != ''].reset_index(drop=True)
+
+    tqdm.pandas(desc='Regenerating BERT input')
+    df['Kalimat Bert'] = df['Kalimat Asli'].progress_apply(
+        lambda x: preprocess(x, for_bert=True)
+    )
+    df = df[df['Kalimat Bert'].str.strip() != ''].reset_index(drop=True)
+
     X = df['Kalimat Dinormalisasi']
     y = df['Level Kata Kasar']
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
-    )
-    logger.info(f'Data loaded | train={len(y_train):,} | test={len(y_test):,}')
+    X_train, _X_val, X_test, y_train, _y_val, y_test = make_splits(X, y)
+    logger.info(f'Data loaded | train={len(y_train):,} | val={len(_y_val):,} | test={len(y_test):,}')
     return X_train, X_test, y_train, y_test
 
 
 def build_tfidf_features(X_train, X_test):
     tfidf_lr = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 5),
                                max_features=50_000, min_df=2, sublinear_tf=True)
-    tfidf_nb = TfidfVectorizer(analyzer='word', ngram_range=(1, 2),
+    tfidf_nb = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 5),
                                max_features=50_000, min_df=2, sublinear_tf=True)
     X_train_lr = tfidf_lr.fit_transform(X_train)
     X_test_lr  = tfidf_lr.transform(X_test)
@@ -72,8 +85,8 @@ def build_tfidf_features(X_train, X_test):
 
 # ── Hyperparameter tuning ──────────────────────────────────────────────────────
 
-def tune_lr(X_train, y_train) -> dict:
-    logger.info(f'LR: starting hyperparameter tuning ({N_TRIALS} trials)')
+def tune_lr(X_train, y_train, n_trials: int = N_TRIALS) -> dict:
+    logger.info(f'LR: starting hyperparameter tuning ({n_trials} trials)')
 
     def objective(trial):
         C      = trial.suggest_float('C', 1e-3, 100.0, log=True)
@@ -90,13 +103,13 @@ def tune_lr(X_train, y_train) -> dict:
 
     study = optuna.create_study(direction='maximize',
                                 sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
-    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=False)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
     logger.info(f'LR BEST | params={study.best_params} | val_CV_F1={study.best_value:.4f}')
     return study.best_params
 
 
-def tune_nb(X_train, y_train) -> dict:
-    logger.info(f'NB: starting hyperparameter tuning ({N_TRIALS} trials)')
+def tune_nb(X_train, y_train, n_trials: int = N_TRIALS) -> dict:
+    logger.info(f'NB: starting hyperparameter tuning ({n_trials} trials)')
 
     def objective(trial):
         alpha = trial.suggest_float('alpha', 1e-3, 10.0, log=True)
@@ -112,13 +125,13 @@ def tune_nb(X_train, y_train) -> dict:
 
     study = optuna.create_study(direction='maximize',
                                 sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
-    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=False)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
     logger.info(f'NB BEST | params={study.best_params} | val_CV_F1={study.best_value:.4f}')
     return study.best_params
 
 
-def tune_svm(X_train, y_train) -> dict:
-    logger.info(f'SVM: starting hyperparameter tuning ({N_TRIALS} trials)')
+def tune_svm(X_train, y_train, n_trials: int = N_TRIALS) -> dict:
+    logger.info(f'SVM: starting hyperparameter tuning ({n_trials} trials)')
 
     def objective(trial):
         C     = trial.suggest_float('C', 1e-3, 100.0, log=True)
@@ -136,7 +149,7 @@ def tune_svm(X_train, y_train) -> dict:
 
     study = optuna.create_study(direction='maximize',
                                 sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
-    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=False)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
     logger.info(f'SVM BEST | params={study.best_params} | val_CV_F1={study.best_value:.4f}')
     return study.best_params
 
@@ -151,7 +164,7 @@ def _log_metrics(model_name: str, split: str, y_true, y_pred):
     return f1
 
 
-def train_lr(X_train, y_train, X_test, y_test):
+def train_lr(X_train, y_train, X_test, y_test, n_trials: int = N_TRIALS):
     logger.info('=' * 60)
     logger.info('LR: training start')
     if not FORCE_RETRAIN and os.path.exists(LR_MODEL_PATH):
@@ -160,7 +173,7 @@ def train_lr(X_train, y_train, X_test, y_test):
             model = pickle.load(f)
         best = None
     else:
-        best  = tune_lr(X_train, y_train)
+        best  = tune_lr(X_train, y_train, n_trials)
         logger.info(f'LR: training final model with best params={best}')
         model = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE,
                                    class_weight='balanced', **best)
@@ -173,7 +186,7 @@ def train_lr(X_train, y_train, X_test, y_test):
     return model, y_pred
 
 
-def train_nb(X_train, y_train, X_test, y_test):
+def train_nb(X_train, y_train, X_test, y_test, n_trials: int = N_TRIALS):
     logger.info('=' * 60)
     logger.info('NB: training start')
     if not FORCE_RETRAIN and os.path.exists(NB_MODEL_PATH):
@@ -182,7 +195,7 @@ def train_nb(X_train, y_train, X_test, y_test):
             model = pickle.load(f)
         best = None
     else:
-        best  = tune_nb(X_train, y_train)
+        best  = tune_nb(X_train, y_train, n_trials)
         logger.info(f'NB: training final model with best params={best}')
         model = ComplementNB(**best)
         model.fit(X_train, y_train)
@@ -194,7 +207,7 @@ def train_nb(X_train, y_train, X_test, y_test):
     return model, y_pred
 
 
-def train_svm(X_train, y_train, X_test, y_test):
+def train_svm(X_train, y_train, X_test, y_test, n_trials: int = N_TRIALS):
     logger.info('=' * 60)
     logger.info('SVM: training start')
     if not FORCE_RETRAIN and os.path.exists(SVM_MODEL_PATH):
@@ -203,11 +216,13 @@ def train_svm(X_train, y_train, X_test, y_test):
             model = pickle.load(f)
         best = None
     else:
-        best     = tune_svm(X_train, y_train)
+        best     = tune_svm(X_train, y_train, n_trials)
         logger.info(f'SVM: training final model with best params={best}')
         svm_base = LinearSVC(max_iter=2000, class_weight='balanced',
                              random_state=RANDOM_STATE, **best)
-        model    = CalibratedClassifierCV(svm_base, cv=5)
+        # cv must match the calibration folds used during tuning (cv=3) so the
+        # selected C is evaluated under the same conditions as the final model.
+        model    = CalibratedClassifierCV(svm_base, cv=3)
         model.fit(X_train, y_train)
     _log_metrics('SVM', 'TRAIN', y_train, model.predict(X_train))
     y_pred = model.predict(X_test)

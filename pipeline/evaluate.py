@@ -75,8 +75,10 @@ def predict_classical(X_test_ml):
 
 def predict_bert(X_test_bert, y_test):
     tokenizer = AutoTokenizer.from_pretrained(BERT_SAVE_PATH)
+    # These are already-fine-tuned 4-label weights; a size mismatch here means
+    # something is wrong, so let it raise rather than silently reinit the head.
     model = AutoModelForSequenceClassification.from_pretrained(
-        BERT_SAVE_PATH, num_labels=4, ignore_mismatched_sizes=True,
+        BERT_SAVE_PATH, num_labels=4,
     ).to(device)
     model.eval()
 
@@ -94,14 +96,13 @@ def predict_bert(X_test_bert, y_test):
     return np.array(preds)
 
 
-def plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_bert,
-                            f1_lr, f1_nb, f1_svm, f1_bert):
+def plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_bert):
     fig, axes = plt.subplots(1, 4, figsize=(22, 5))
     specs = [
-        (y_test, y_pred_lr,   f'Logistic Regression\nF1={f1_lr:.4f}'),
-        (y_test, y_pred_nb,   f'Naive Bayes\nF1={f1_nb:.4f}'),
-        (y_test, y_pred_svm,  f'SVM (LinearSVC)\nF1={f1_svm:.4f}'),
-        (y_test, y_pred_bert, f'IndoBERT\nF1={f1_bert:.4f}'),
+        (y_test, y_pred_lr,   f'Logistic Regression'),
+        (y_test, y_pred_nb,   f'Naive Bayes'),
+        (y_test, y_pred_svm,  f'SVM (LinearSVC)'),
+        (y_test, y_pred_bert, f'IndoBERT'),
     ]
     for ax, (yt, yp, title) in zip(axes, specs):
         cm = confusion_matrix(yt, yp, labels=[0, 1, 2, 3])
@@ -187,6 +188,5 @@ if __name__ == '__main__':
     print('\n=== Model Comparison ===')
     print(results.to_string())
 
-    plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_bert,
-                            f1_lr, f1_nb, f1_svm, f1_bert)
+    plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_bert)
     plot_model_comparison(results)
