@@ -26,8 +26,10 @@ from sklearn.metrics import f1_score, classification_report
 from config import (
     OUTPUT_PATH, MODELS_DIR, FORCE_RETRAIN,
     LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
-    TEST_SIZE, RANDOM_STATE, N_TRIALS,
+    TEST_SIZE, RANDOM_STATE,
 )
+
+N_TRIALS=100
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 

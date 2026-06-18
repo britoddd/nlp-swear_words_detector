@@ -1,0 +1,245 @@
+================================================================================
+        AN AUDIT OF FEATURE-COLUMN UTILISATION IN THE PREPROCESSING
+        AND TRAINING PIPELINE OF AN INDONESIAN SWEAR-WORD DETECTOR
+================================================================================
+
+Technical Report
+Project : NLP Swear-Word Detector (Indonesian / Bahasa Indonesia)
+Author  : Brian Nich
+Date    : 8 June 2026
+Status  : Internal Engineering Report
+
+
+--------------------------------------------------------------------------------
+ABSTRACT
+--------------------------------------------------------------------------------
+This report documents a static-analysis audit of the data-preprocessing and
+model-training pipeline used in an Indonesian swear-word (profanity-level)
+detection system. The objective was to determine whether every feature column
+produced by the preprocessing stage is subsequently consumed during model
+training, and to identify any columns that are generated but never used. The
+audit traced the data flow from the preprocessing module
+(preprocess_pipeline.py) through the classical machine-learning trainer
+(train_classical.py) and the transformer-based trainer (train_bert.py). We find
+that of the four columns produced by preprocessing, one column ("Disamarkan") is
+never consumed by any training, evaluation, or inference component, and a second
+column ("Kalimat Bert") is computed but discarded before persistence and later
+recomputed redundantly. We quantify the findings and recommend three remediation
+options.
+
+
+--------------------------------------------------------------------------------
+1. INTRODUCTION
+--------------------------------------------------------------------------------
+The system classifies Indonesian text into four ordinal profanity levels
+(Level 0 through Level 3). It comprises two parallel modelling tracks:
+
+   (i)  A classical track using TF-IDF features with Logistic Regression (LR),
+        Complement Naive Bayes (NB), and a calibrated Linear Support Vector
+        Classifier (SVM).
+   (ii) A deep-learning track fine-tuning IndoBERTweet (IndoBERT) for sequence
+        classification.
+
+Both tracks read from a single intermediate artefact, dataset_processed.csv,
+produced by a seven-step preprocessing pipeline. A correct pipeline should
+produce no unused intermediate features; unused features represent wasted
+computation, dead code, and potential maintenance hazards. This audit verifies
+that property.
+
+
+--------------------------------------------------------------------------------
+2. METHODOLOGY
+--------------------------------------------------------------------------------
+The audit was performed by static inspection and cross-referencing of the
+source files. The procedure was:
+
+   1. Enumerate all columns created by the preprocessing routine
+      apply_preprocessing() in preprocess_pipeline.py.
+   2. Determine which subset of those columns is persisted to
+      dataset_processed.csv.
+   3. Trace each training entry point (train_classical.py, train_bert.py) to
+      record which columns are read during data loading and feature
+      construction.
+   4. Perform a project-wide textual search for every column name to detect any
+      additional consumers (evaluation, inference, application code).
+   5. Classify each column as USED or UNUSED with respect to model training.
+
+
+--------------------------------------------------------------------------------
+3. PIPELINE DESCRIPTION
+--------------------------------------------------------------------------------
+3.1 Columns produced by preprocessing
+-------------------------------------
+The function apply_preprocessing() (preprocess_pipeline.py, line 116) augments
+the raw DataFrame with four columns:
+
+   +----------------------------+----------+--------------------------------------+
+   | Column                     | Line     | Purpose                              |
+   +----------------------------+----------+--------------------------------------+
+   | Kalimat Asli               | 119      | Raw tweet text (string copy)         |
+   | Disamarkan                 | 120      | Binary flag: leet-speak / disguise   |
+   |                            |          | detected in the text (0/1)           |
+   | Kalimat Dinormalisasi      | 123      | Fully normalised + stemmed token     |
+   |                            |          | string, intended for TF-IDF          |
+   | Kalimat Bert               | 127      | Lightly cleaned text for the BERT    |
+   |                            |          | tokeniser (no stemming)              |
+   +----------------------------+----------+--------------------------------------+
+
+3.2 Columns persisted to disk
+-----------------------------
+At persistence time (preprocess_pipeline.py, line 142) only a subset is written
+to dataset_processed.csv:
+
+      Kalimat Asli, Kalimat Dinormalisasi, Level Kata Kasar, Disamarkan
+
+Here "Level Kata Kasar" is the class label, which originates from the raw
+dataset and is not created by preprocessing. Crucially, "Kalimat Bert" is
+EXCLUDED from the saved file despite being computed.
+
+
+--------------------------------------------------------------------------------
+4. CONSUMPTION ANALYSIS
+--------------------------------------------------------------------------------
+4.1 Classical trainer (train_classical.py)
+------------------------------------------
+load_splits() (line 55) reads exactly two columns:
+
+      X = Kalimat Dinormalisasi      (feature text -> TF-IDF)
+      y = Level Kata Kasar           (label)
+
+It does NOT reference Kalimat Asli or Disamarkan.
+
+4.2 Transformer trainer (train_bert.py)
+---------------------------------------
+load_splits() (line 107) reads:
+
+      Kalimat Asli            -> used to REGENERATE Kalimat Bert at runtime
+                                 (line 115) via preprocess(x, for_bert=True)
+      Kalimat Dinormalisasi   -> used only for null/empty row filtering and
+                                 passed as X_ml into make_splits; the BERT model
+                                 itself trains on X_bert, not X_ml
+      Level Kata Kasar        -> label (y)
+
+It does NOT reference Disamarkan. The "Kalimat Bert" column saved-or-not is
+irrelevant to this script because the script recreates it from Kalimat Asli.
+
+4.3 Project-wide search
+-----------------------
+A textual search for "Disamarkan" across all Python sources returned matches in
+preprocess_pipeline.py ONLY (creation at line 120, persistence at line 142, and
+a descriptive print statistic at lines 145-146). No training, evaluation, or
+inference module reads this column.
+
+
+--------------------------------------------------------------------------------
+5. RESULTS
+--------------------------------------------------------------------------------
+5.1 Column-utilisation matrix
+-----------------------------
+   +-------------------------+---------+-----------+-----------+----------------+
+   | Column                  | Saved   | Classical | BERT      | Verdict        |
+   +-------------------------+---------+-----------+-----------+----------------+
+   | Kalimat Asli            | Yes     | No        | Yes (src) | USED           |
+   | Kalimat Dinormalisasi   | Yes     | Yes (X)   | Filter    | USED           |
+   | Level Kata Kasar        | Yes     | Yes (y)   | Yes (y)   | USED (label)   |
+   | Disamarkan              | Yes     | No        | No        | UNUSED         |
+   | Kalimat Bert            | No      | No        | Recomputed| WASTED COMPUTE |
+   +-------------------------+---------+-----------+-----------+----------------+
+
+5.2 Principal findings
+----------------------
+FINDING 1 (Unused feature column): "Disamarkan"
+   The disguise-detection flag is computed for every row and written to the
+   persisted dataset, yet it is never consumed by any model. It currently
+   functions only as an input to a console statistic. It is, with respect to
+   modelling, a dead feature.
+
+FINDING 2 (Wasted computation): "Kalimat Bert"
+   The BERT-oriented text column is produced inside apply_preprocessing() but is
+   then excluded from the saved CSV. The transformer trainer regenerates the
+   identical column from "Kalimat Asli" at load time. The preprocessing-stage
+   computation of this column is therefore redundant work that is discarded.
+
+FINDING 3 (Partial use): "Kalimat Dinormalisasi" in the BERT track
+   Within the transformer trainer this column is used only for row filtering and
+   is not an actual model input; the BERT model is trained exclusively on the
+   regenerated BERT text.
+
+
+--------------------------------------------------------------------------------
+6. DISCUSSION
+--------------------------------------------------------------------------------
+The presence of the "Disamarkan" flag suggests an original design intent to use
+disguise detection as an auxiliary signal (e.g., as an additional feature
+concatenated to the TF-IDF vector, or as a routing/weighting signal). That
+intent was never realised in the modelling code. Two coherent resolutions exist:
+either operationalise the feature by feeding it into the classifiers, or remove
+it to eliminate dead state.
+
+The "Kalimat Bert" redundancy is a straightforward efficiency defect. Computing
+the column twice (once discarded, once at train time) doubles that portion of
+preprocessing cost without benefit. Aligning production and consumption — by
+persisting the column and reading it, or by removing its premature computation —
+restores a single source of truth.
+
+None of the findings indicate a correctness defect in the trained models: the
+models consume valid, intended inputs. The findings concern wasted computation,
+dead state, and reduced pipeline clarity.
+
+
+--------------------------------------------------------------------------------
+7. RECOMMENDATIONS
+--------------------------------------------------------------------------------
+R1. Resolve "Disamarkan". Either:
+       (a) integrate it as an explicit auxiliary feature for the classical
+           models (hstack onto the TF-IDF matrix), OR
+       (b) remove its creation and persistence if disguise detection is not a
+           planned feature.
+
+R2. Resolve "Kalimat Bert" redundancy. Either:
+       (a) include the column in the persisted CSV and read it directly in
+           train_bert.py, OR
+       (b) stop computing it inside apply_preprocessing() since it is
+           regenerated at train time.
+
+R3. Clarify the role of "Kalimat Dinormalisasi" in train_bert.py. If its sole
+    purpose there is row filtering, document this explicitly to prevent the
+    misconception that it is a BERT model input.
+
+
+--------------------------------------------------------------------------------
+8. CONCLUSION
+--------------------------------------------------------------------------------
+The audit confirms that not every column produced by preprocessing is used in
+training. Of the four generated columns, "Disamarkan" is entirely unused by the
+modelling code, and "Kalimat Bert" is computed redundantly. The remaining
+columns are used as intended. Addressing the three recommendations will remove
+dead state, eliminate duplicated computation, and improve the maintainability
+and transparency of the pipeline.
+
+
+--------------------------------------------------------------------------------
+APPENDIX A. ARTEFACT REFERENCES
+--------------------------------------------------------------------------------
+   preprocess_pipeline.py
+       line 116  apply_preprocessing() definition
+       line 119  Kalimat Asli created
+       line 120  Disamarkan created
+       line 123  Kalimat Dinormalisasi created
+       line 127  Kalimat Bert created
+       line 142  Persisted column subset (Kalimat Bert excluded)
+       line 145  Disamarkan used for console statistic only
+
+   train_classical.py
+       line 55   load_splits(): reads Kalimat Dinormalisasi (X), Level Kata
+                 Kasar (y)
+
+   train_bert.py
+       line 107  load_splits()
+       line 115  Kalimat Bert regenerated from Kalimat Asli
+       line 120  X_ml = Kalimat Dinormalisasi (filtering / split bookkeeping)
+       line 121  X_bert = Kalimat Bert (actual model input)
+
+================================================================================
+                              END OF REPORT
+================================================================================
