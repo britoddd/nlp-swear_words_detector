@@ -20,6 +20,7 @@ Writes: saved_models/indobert_finetuned/
 """
 
 import os
+import logging
 import numpy as np
 import pandas as pd
 import torch
@@ -49,6 +50,28 @@ from data_loader import make_splits
 
 hf_logging.set_verbosity_error()
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+# ── Logging ────────────────────────────────────────────────────
+# Mirrors the classical trainers' setup_logging(): every trial's parameters and
+# each epoch's train-loss / val-F1 are written to both the console and a file so
+# a full record survives even if the run later crashes.
+LOG_PATH = os.path.join(OUTPUTS_DIR, 'bert_training_log.txt')
+logger = logging.getLogger('bert_training')
+logger.setLevel(logging.INFO)
+
+
+def setup_logging() -> str:
+    os.makedirs(OUTPUTS_DIR, exist_ok=True)
+    if not logger.handlers:
+        fmt = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s',
+                                datefmt='%Y-%m-%d %H:%M:%S')
+        fh = logging.FileHandler(LOG_PATH, encoding='utf-8')
+        fh.setFormatter(fmt)
+        ch = logging.StreamHandler()
+        ch.setFormatter(fmt)
+        logger.addHandler(fh)
+        logger.addHandler(ch)
+    return LOG_PATH
 
 # Conda sometimes sets SSL_CERT_FILE to a path that no longer exists, which
 # causes httpx (used by huggingface_hub) to crash when building an SSL context.
@@ -189,6 +212,12 @@ def _objective(trial, X_train, X_val, y_train, y_val, tokenizer):
     warmup_ratio = trial.suggest_float('warmup_ratio',  0.0,  0.2)
     batch_size   = trial.suggest_categorical('batch_size', [16, 32])
 
+    logger.info(
+        'Trial %d START | learning_rate=%.3e weight_decay=%.4f '
+        'warmup_ratio=%.4f batch_size=%d',
+        trial.number, lr, weight_decay, warmup_ratio, batch_size,
+    )
+
     train_loader = _make_loader(X_train, y_train, tokenizer, shuffle=True,  batch_size=batch_size)
     val_loader   = _make_loader(X_val,   y_val,   tokenizer, shuffle=False, batch_size=batch_size)
 
@@ -200,26 +229,35 @@ def _objective(trial, X_train, X_val, y_train, y_val, tokenizer):
         model, len(train_loader), TRIAL_EPOCHS, lr, weight_decay, warmup_ratio
     )
 
+    val_f1 = 0.0
     for epoch in range(TRIAL_EPOCHS):
-        _ = train_one_epoch(model, train_loader, optimizer, scheduler)
+        train_loss = train_one_epoch(model, train_loader, optimizer, scheduler)
         val_pred, val_true = run_eval(model, val_loader)
         val_f1 = f1_score(val_true, val_pred, average='macro')
+        logger.info(
+            'Trial %d | epoch %d/%d | train_loss=%.4f | val_f1=%.4f',
+            trial.number, epoch + 1, TRIAL_EPOCHS, train_loss, val_f1,
+        )
         trial.report(val_f1, epoch)
         if trial.should_prune():
+            logger.info('Trial %d PRUNED at epoch %d (val_f1=%.4f)',
+                        trial.number, epoch + 1, val_f1)
             del model
             torch.cuda.empty_cache()
             raise optuna.TrialPruned()
 
+    logger.info('Trial %d COMPLETE | final val_f1=%.4f', trial.number, val_f1)
     del model
     torch.cuda.empty_cache()
     return val_f1
 
 
 def run_tuning(X_train, X_val, y_train, y_val, tokenizer) -> tuple[dict, optuna.Study]:
-    print(f'\n{"="*55}')
-    print(f'Hyperparameter Tuning — {N_TRIALS} trials × {TRIAL_EPOCHS} epochs each')
-    print(f'Search space: learning_rate, weight_decay, warmup_ratio, batch_size')
-    print(f'{"="*55}')
+    logger.info('=' * 55)
+    logger.info('Hyperparameter Tuning — %d trials × %d epochs each',
+                N_TRIALS, TRIAL_EPOCHS)
+    logger.info('Search space: learning_rate, weight_decay, warmup_ratio, batch_size')
+    logger.info('=' * 55)
 
     pruner = optuna.pruners.MedianPruner(n_warmup_steps=1)
     study  = optuna.create_study(
@@ -233,20 +271,24 @@ def run_tuning(X_train, X_val, y_train, y_val, tokenizer) -> tuple[dict, optuna.
         show_progress_bar=True,
     )
 
-    # Print trial summary
-    trials_df = study.trials_dataframe(attrs=('number', 'value', 'params', 'state'))
-    print('\nAll trials:')
-    print(trials_df.to_string(index=False))
+    # Trial summary — 'intermediate_values' adds one column per epoch
+    # (intermediate_value_0, _1, …) so the per-epoch val-F1 of every trial is
+    # persisted, not just each trial's final score.
+    trials_df = study.trials_dataframe(
+        attrs=('number', 'value', 'params', 'state', 'intermediate_values')
+    )
+    logger.info('All trials:\n%s', trials_df.to_string(index=False))
 
     os.makedirs(OUTPUTS_DIR, exist_ok=True)
     tuning_path = os.path.join(OUTPUTS_DIR, 'hparam_tuning.csv')
     trials_df.to_csv(tuning_path, index=False)
-    print(f'Saved → {tuning_path}')
+    logger.info('Saved → %s', tuning_path)
 
     best = study.best_params
-    print(f'\nBest trial #{study.best_trial.number}  Val F1 = {study.best_value:.4f}')
+    logger.info('Best trial #%d  Val F1 = %.4f',
+                study.best_trial.number, study.best_value)
     for k, v in best.items():
-        print(f'  {k}: {v}')
+        logger.info('  %s: %s', k, v)
 
     return best, study
 
@@ -259,11 +301,11 @@ def train_final(best_params, X_train, X_val, X_test, y_train, y_val, y_test, tok
     warmup_ratio = best_params['warmup_ratio']
     batch_size   = best_params['batch_size']
 
-    print(f'\n{"="*55}')
-    print(f'Final training — {EPOCHS} epochs on {device}')
-    print(f'  learning_rate = {lr:.2e}  weight_decay = {weight_decay:.4f}')
-    print(f'  warmup_ratio  = {warmup_ratio:.4f}  batch_size = {batch_size}')
-    print(f'{"="*55}')
+    logger.info('=' * 55)
+    logger.info('Final training — %d epochs on %s', EPOCHS, device)
+    logger.info('  learning_rate = %.2e  weight_decay = %.4f', lr, weight_decay)
+    logger.info('  warmup_ratio  = %.4f  batch_size = %d', warmup_ratio, batch_size)
+    logger.info('=' * 55)
 
     train_loader = _make_loader(X_train, y_train, tokenizer, shuffle=True,  batch_size=batch_size)
     val_loader   = _make_loader(X_val,   y_val,   tokenizer, shuffle=False, batch_size=batch_size)
@@ -277,18 +319,20 @@ def train_final(best_params, X_train, X_val, X_test, y_train, y_val, y_test, tok
         model, len(train_loader), EPOCHS, lr, weight_decay, warmup_ratio
     )
 
-    print(f'\n{"Epoch":>5}  {"Train Loss":>10}  {"Val F1":>8}')
-    print('-' * 30)
+    logger.info('%5s  %10s  %8s', 'Epoch', 'Train Loss', 'Val F1')
     history = []
     for epoch in range(1, EPOCHS + 1):
         train_loss = train_one_epoch(model, train_loader, optimizer, scheduler)
         val_pred, val_true = run_eval(model, val_loader)
         val_f1 = f1_score(val_true, val_pred, average='macro')
         history.append({'epoch': epoch, 'loss': train_loss, 'val_f1': val_f1})
-        print(f'{epoch:>5}  {train_loss:>10.4f}  {val_f1:>8.4f}')
+        logger.info('%5d  %10.4f  %8.4f', epoch, train_loss, val_f1)
 
-    # Save training curve
+    # Save training curve + the underlying per-epoch numbers
     hist_df = pd.DataFrame(history)
+    hist_path = os.path.join(OUTPUTS_DIR, 'bert_final_history.csv')
+    hist_df.to_csv(hist_path, index=False)
+    logger.info('Saved → %s', hist_path)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
     ax1.plot(hist_df['epoch'], hist_df['loss'],   marker='o', color='#e74c3c')
     ax1.set_title('Train Loss');     ax1.set_xlabel('Epoch'); ax1.set_ylabel('Loss')
@@ -299,26 +343,29 @@ def train_final(best_params, X_train, X_val, X_test, y_train, y_val, y_test, tok
     curve_path = os.path.join(OUTPUTS_DIR, 'bert_training_history.png')
     plt.savefig(curve_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f'Saved → {curve_path}')
+    logger.info('Saved → %s', curve_path)
 
     # Save model
     os.makedirs(BERT_SAVE_PATH, exist_ok=True)
     model.save_pretrained(BERT_SAVE_PATH)
     tokenizer.save_pretrained(BERT_SAVE_PATH)
-    print(f'Saved → {BERT_SAVE_PATH}')
+    logger.info('Saved → %s', BERT_SAVE_PATH)
 
     # ── Test evaluation — only after training is complete ─────────
-    print('\n=== TEST SET RESULTS (held-out) ===')
+    logger.info('=== TEST SET RESULTS (held-out) ===')
     y_pred, y_true = run_eval(model, test_loader)
     f1 = f1_score(y_true, y_pred, average='macro')
-    print(f'IndoBERT  F1 (macro) = {f1:.4f}')
-    print(classification_report(y_true, y_pred,
+    logger.info('IndoBERT  F1 (macro) = %.4f', f1)
+    logger.info('\n%s', classification_report(y_true, y_pred,
           target_names=['Level 0', 'Level 1', 'Level 2', 'Level 3']))
 
 
 # ── Entry point ────────────────────────────────────────────────
 
 def main():
+    log_path = setup_logging()
+    logger.info('Logging to %s', log_path)
+
     tokenizer = AutoTokenizer.from_pretrained(
         BERT_SAVE_PATH if os.path.exists(BERT_SAVE_PATH) else INDOBERT_MODEL
     )
@@ -326,26 +373,26 @@ def main():
     X_train, X_val, X_test, y_train, y_val, y_test = load_splits()
 
     if not FORCE_RETRAIN and os.path.exists(BERT_SAVE_PATH):
-        print(f'Loading fine-tuned weights from {BERT_SAVE_PATH}')
-        print('Set FORCE_RETRAIN=True in config.py to retrain.')
+        logger.info('Loading fine-tuned weights from %s', BERT_SAVE_PATH)
+        logger.info('Set FORCE_RETRAIN=True in config.py to retrain.')
         # Already-fine-tuned 4-label weights — surface a mismatch instead of
         # silently reinitialising the classifier head.
         model = AutoModelForSequenceClassification.from_pretrained(
             BERT_SAVE_PATH, num_labels=4,
         ).to(device)
         test_loader = _make_loader(X_test, y_test, tokenizer, shuffle=False)
-        print('\n=== TEST SET RESULTS (held-out) ===')
+        logger.info('=== TEST SET RESULTS (held-out) ===')
         y_pred, y_true = run_eval(model, test_loader)
         f1 = f1_score(y_true, y_pred, average='macro')
-        print(f'IndoBERT  F1 (macro) = {f1:.4f}')
-        print(classification_report(y_true, y_pred,
+        logger.info('IndoBERT  F1 (macro) = %.4f', f1)
+        logger.info('\n%s', classification_report(y_true, y_pred,
               target_names=['Level 0', 'Level 1', 'Level 2', 'Level 3']))
         return
 
     # Download and snapshot the base model once so every Optuna trial loads
     # from local disk and never fails due to network or cache issues.
     if not os.path.isfile(os.path.join(_BASE_MODEL_CACHE, 'config.json')):
-        print(f'Caching base model to {_BASE_MODEL_CACHE} ...')
+        logger.info('Caching base model to %s ...', _BASE_MODEL_CACHE)
         os.makedirs(_BASE_MODEL_CACHE, exist_ok=True)
         _base = AutoModelForSequenceClassification.from_pretrained(
             INDOBERT_MODEL, num_labels=4, ignore_mismatched_sizes=True,
@@ -360,4 +407,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # Guard the whole run so a fatal error (OOM, CUDA abort, etc.) is recorded
+    # in the log file with a full traceback instead of vanishing on stderr.
+    setup_logging()
+    try:
+        main()
+    except Exception:
+        logger.exception('BERT training aborted with an unhandled exception')
+        raise
