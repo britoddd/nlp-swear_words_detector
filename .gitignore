@@ -4,3 +4,9 @@ saved_models/*
 outputs/*
 paper
 scrape
+
+# Root-level binaries — kept locally, not tracked (live copies live in outputs/)
+/Proposal NLP - Group 10.pdf
+/bert_training_history.png
+/confusion_matrices.png
+/model_comparison.png
