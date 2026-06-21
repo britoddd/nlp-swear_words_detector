@@ -5,6 +5,7 @@ colorFrom: red
 colorTo: indigo
 sdk: streamlit
 sdk_version: 1.39.0
+python_version: "3.11"
 app_file: app/app.py
 pinned: false
 ---
