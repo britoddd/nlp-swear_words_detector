@@ -14,6 +14,14 @@ LEVEL_LABELS = {
 
 class ModelPredictor:
     def __init__(self, models_dir: str):
+        # On Hugging Face Spaces the 436 MB of model artifacts live in a Hub
+        # model repo (the Space git repo stays tiny). When MODEL_REPO_ID is set
+        # we download a local snapshot once and load from it; otherwise we use
+        # the local saved_models/ directory (local development).
+        repo_id = os.environ.get("MODEL_REPO_ID")
+        if repo_id:
+            from huggingface_hub import snapshot_download
+            models_dir = snapshot_download(repo_id=repo_id)
         self._load_classical(models_dir)
         self._load_bert(os.path.join(models_dir, "indobert_finetuned"))
 

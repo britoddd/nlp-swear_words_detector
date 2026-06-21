@@ -1,0 +1,132 @@
+2026-06-20 19:47:05 | INFO | ============================================================
+2026-06-20 19:47:05 | INFO | Strategy: random oversampling on raw text
+2026-06-20 19:47:05 | INFO | Data loaded | train=18,752 (after oversampling) | test=2,634
+2026-06-20 19:47:09 | INFO | ============================================================
+2026-06-20 19:47:09 | INFO | LR: training start
+2026-06-20 19:47:09 | INFO | LR: starting hyperparameter tuning (10 trials)
+2026-06-20 19:47:15 | INFO | LR | trial   0 | params={'C': 0.0745934328572655, 'solver': 'lbfgs'} | train_F1=0.8004 | val_CV_F1=0.7611
+2026-06-20 19:47:25 | INFO | LR | trial   1 | params={'C': 0.9846738873614566, 'solver': 'lbfgs'} | train_F1=0.9233 | val_CV_F1=0.8617
+2026-06-20 19:47:27 | INFO | LR | trial   2 | params={'C': 0.0019517224641449498, 'solver': 'lbfgs'} | train_F1=0.6538 | val_CV_F1=0.6377
+2026-06-20 19:47:50 | INFO | LR | trial   3 | params={'C': 3.4702669886504163, 'solver': 'saga'} | train_F1=0.9661 | val_CV_F1=0.8962
+2026-06-20 19:48:16 | INFO | LR | trial   4 | params={'C': 14.528246637516036, 'solver': 'lbfgs'} | train_F1=0.9887 | val_CV_F1=0.9132
+2026-06-20 19:48:19 | INFO | LR | trial   5 | params={'C': 0.008260808399079604, 'solver': 'saga'} | train_F1=0.6959 | val_CV_F1=0.6680
+2026-06-20 19:48:22 | INFO | LR | trial   6 | params={'C': 0.14445251022763064, 'solver': 'saga'} | train_F1=0.8344 | val_CV_F1=0.7905
+2026-06-20 19:48:25 | INFO | LR | trial   7 | params={'C': 0.004982752357076452, 'solver': 'saga'} | train_F1=0.6761 | val_CV_F1=0.6533
+2026-06-20 19:48:31 | INFO | LR | trial   8 | params={'C': 0.19069966103000435, 'solver': 'lbfgs'} | train_F1=0.8496 | val_CV_F1=0.8014
+2026-06-20 19:48:39 | INFO | LR | trial   9 | params={'C': 0.37253938395788866, 'solver': 'lbfgs'} | train_F1=0.8805 | val_CV_F1=0.8307
+2026-06-20 19:48:39 | INFO | LR BEST | params={'C': 14.528246637516036, 'solver': 'lbfgs'} | val_CV_F1=0.9132
+2026-06-20 19:48:39 | INFO | LR: training final model with best params={'C': 14.528246637516036, 'solver': 'lbfgs'}
+2026-06-20 19:48:53 | INFO | LR | TRAIN | macro_F1=0.9887
+2026-06-20 19:48:53 | INFO | LR | TRAIN | classification report:
+              precision    recall  f1-score   support
+
+     Level 0       0.99      0.98      0.99      4688
+     Level 1       0.98      0.98      0.98      4688
+     Level 2       0.98      0.99      0.99      4688
+     Level 3       1.00      1.00      1.00      4688
+
+    accuracy                           0.99     18752
+   macro avg       0.99      0.99      0.99     18752
+weighted avg       0.99      0.99      0.99     18752
+
+2026-06-20 19:48:53 | INFO | LR | TEST | macro_F1=0.7101
+2026-06-20 19:48:53 | INFO | LR | TEST | classification report:
+              precision    recall  f1-score   support
+
+     Level 0       0.84      0.87      0.86      1172
+     Level 1       0.80      0.73      0.76      1026
+     Level 2       0.49      0.56      0.52       341
+     Level 3       0.68      0.73      0.70        95
+
+    accuracy                           0.77      2634
+   macro avg       0.70      0.72      0.71      2634
+weighted avg       0.77      0.77      0.77      2634
+
+2026-06-20 19:48:53 | INFO | LR SUMMARY | best_params={'C': 14.528246637516036, 'solver': 'lbfgs'}
+2026-06-20 19:48:53 | INFO | ============================================================
+2026-06-20 19:48:53 | INFO | NB: training start
+2026-06-20 19:48:53 | INFO | NB: starting hyperparameter tuning (10 trials)
+2026-06-20 19:48:53 | INFO | NB | trial   0 | params={'alpha': 0.03148911647956861, 'norm': True} | train_F1=0.5881 | val_CV_F1=0.5590
+2026-06-20 19:48:54 | INFO | NB | trial   1 | params={'alpha': 0.24810409748678125, 'norm': True} | train_F1=0.7104 | val_CV_F1=0.6841
+2026-06-20 19:48:54 | INFO | NB | trial   2 | params={'alpha': 0.0017073967431528124, 'norm': True} | train_F1=0.4603 | val_CV_F1=0.4276
+2026-06-20 19:48:55 | INFO | NB | trial   3 | params={'alpha': 0.679657809075816, 'norm': False} | train_F1=0.8084 | val_CV_F1=0.7641
+2026-06-20 19:48:55 | INFO | NB | trial   4 | params={'alpha': 2.1368329072358767, 'norm': True} | train_F1=0.7440 | val_CV_F1=0.7123
+2026-06-20 19:48:55 | INFO | NB | trial   5 | params={'alpha': 0.00541524411940254, 'norm': False} | train_F1=0.8641 | val_CV_F1=0.8078
+2026-06-20 19:48:56 | INFO | NB | trial   6 | params={'alpha': 0.05342937261279776, 'norm': False} | train_F1=0.8502 | val_CV_F1=0.8009
+2026-06-20 19:48:56 | INFO | NB | trial   7 | params={'alpha': 0.003613894271216527, 'norm': False} | train_F1=0.8650 | val_CV_F1=0.8089
+2026-06-20 19:48:57 | INFO | NB | trial   8 | params={'alpha': 0.06672367170464207, 'norm': True} | train_F1=0.6290 | val_CV_F1=0.6067
+2026-06-20 19:48:57 | INFO | NB | trial   9 | params={'alpha': 0.11400863701127326, 'norm': True} | train_F1=0.6662 | val_CV_F1=0.6440
+2026-06-20 19:48:57 | INFO | NB BEST | params={'alpha': 0.003613894271216527, 'norm': False} | val_CV_F1=0.8089
+2026-06-20 19:48:57 | INFO | NB: training final model with best params={'alpha': 0.003613894271216527, 'norm': False}
+2026-06-20 19:48:57 | INFO | NB | TRAIN | macro_F1=0.8650
+2026-06-20 19:48:57 | INFO | NB | TRAIN | classification report:
+              precision    recall  f1-score   support
+
+     Level 0       0.90      0.88      0.89      4688
+     Level 1       0.86      0.83      0.84      4688
+     Level 2       0.90      0.77      0.83      4688
+     Level 3       0.83      0.98      0.90      4688
+
+    accuracy                           0.87     18752
+   macro avg       0.87      0.87      0.87     18752
+weighted avg       0.87      0.87      0.87     18752
+
+2026-06-20 19:48:57 | INFO | NB | TEST | macro_F1=0.5715
+2026-06-20 19:48:57 | INFO | NB | TEST | classification report:
+              precision    recall  f1-score   support
+
+     Level 0       0.76      0.80      0.78      1172
+     Level 1       0.74      0.59      0.65      1026
+     Level 2       0.43      0.40      0.41       341
+     Level 3       0.30      0.84      0.44        95
+
+    accuracy                           0.67      2634
+   macro avg       0.56      0.66      0.57      2634
+weighted avg       0.69      0.67      0.67      2634
+
+2026-06-20 19:48:57 | INFO | NB SUMMARY | best_params={'alpha': 0.003613894271216527, 'norm': False}
+2026-06-20 19:48:57 | INFO | ============================================================
+2026-06-20 19:48:57 | INFO | SVM: training start
+2026-06-20 19:48:57 | INFO | SVM: starting hyperparameter tuning (10 trials)
+2026-06-20 19:48:59 | INFO | SVM | trial   0 | params={'C': 0.0745934328572655} | train_F1=0.8721 | val_CV_F1=0.8268
+2026-06-20 19:50:14 | INFO | SVM | trial   1 | params={'C': 56.69849511478853} | train_F1=0.9982 | val_CV_F1=0.9107
+2026-06-20 19:50:25 | INFO | SVM | trial   2 | params={'C': 4.5705630998014515} | train_F1=0.9907 | val_CV_F1=0.9146
+2026-06-20 19:50:29 | INFO | SVM | trial   3 | params={'C': 0.9846738873614566} | train_F1=0.9656 | val_CV_F1=0.8975
+2026-06-20 19:50:31 | INFO | SVM | trial   4 | params={'C': 0.006026889128682512} | train_F1=0.7597 | val_CV_F1=0.7299
+2026-06-20 19:50:33 | INFO | SVM | trial   5 | params={'C': 0.0060252157362038605} | train_F1=0.7597 | val_CV_F1=0.7299
+2026-06-20 19:50:35 | INFO | SVM | trial   6 | params={'C': 0.0019517224641449498} | train_F1=0.7259 | val_CV_F1=0.7070
+2026-06-20 19:51:19 | INFO | SVM | trial   7 | params={'C': 21.42302175774105} | train_F1=0.9974 | val_CV_F1=0.9132
+2026-06-20 19:51:23 | INFO | SVM | trial   8 | params={'C': 1.0129197956845732} | train_F1=0.9669 | val_CV_F1=0.8978
+2026-06-20 19:51:32 | INFO | SVM | trial   9 | params={'C': 3.4702669886504163} | train_F1=0.9879 | val_CV_F1=0.9134
+2026-06-20 19:51:32 | INFO | SVM BEST | params={'C': 4.5705630998014515} | val_CV_F1=0.9146
+2026-06-20 19:51:32 | INFO | SVM: training final model with best params={'C': 4.5705630998014515}
+2026-06-20 19:51:38 | INFO | SVM | TRAIN | macro_F1=0.9907
+2026-06-20 19:51:38 | INFO | SVM | TRAIN | classification report:
+              precision    recall  f1-score   support
+
+     Level 0       0.99      0.99      0.99      4688
+     Level 1       0.99      0.98      0.98      4688
+     Level 2       0.99      0.99      0.99      4688
+     Level 3       1.00      1.00      1.00      4688
+
+    accuracy                           0.99     18752
+   macro avg       0.99      0.99      0.99     18752
+weighted avg       0.99      0.99      0.99     18752
+
+2026-06-20 19:51:38 | INFO | SVM | TEST | macro_F1=0.7031
+2026-06-20 19:51:38 | INFO | SVM | TEST | classification report:
+              precision    recall  f1-score   support
+
+     Level 0       0.82      0.88      0.85      1172
+     Level 1       0.80      0.72      0.75      1026
+     Level 2       0.49      0.52      0.51       341
+     Level 3       0.75      0.66      0.70        95
+
+    accuracy                           0.76      2634
+   macro avg       0.71      0.70      0.70      2634
+weighted avg       0.76      0.76      0.76      2634
+
+2026-06-20 19:51:38 | INFO | SVM SUMMARY | best_params={'C': 4.5705630998014515}
+2026-06-20 19:51:38 | INFO | Models saved to D:\projects\nlp-swear_words_detector\saved_models/
+2026-06-20 19:51:38 | INFO | ============================================================
+2026-06-20 19:51:38 | INFO | Complete. Log: D:\projects\nlp-swear_words_detector\logs\classical_random_oversample.log

@@ -106,18 +106,9 @@ def plot_confusion_matrices(y_test, y_pred_lr, y_pred_nb, y_pred_svm, y_pred_ber
     ]
     for ax, (yt, yp, title) in zip(axes, specs):
         cm = confusion_matrix(yt, yp, labels=[0, 1, 2, 3])
-        # Draw colours with seaborn but annotate manually: seaborn's own
-        # annot=True path silently drops all but the first row under some
-        # matplotlib / numpy-2.x backend combinations.
-        sns.heatmap(cm, annot=False, cmap='Blues', ax=ax, cbar=True,
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
                     xticklabels=['L0', 'L1', 'L2', 'L3'],
                     yticklabels=['L0', 'L1', 'L2', 'L3'])
-        thresh = cm.max() / 2 if cm.max() else 0
-        for i in range(cm.shape[0]):
-            for j in range(cm.shape[1]):
-                ax.text(j + 0.5, i + 0.5, format(cm[i, j], 'd'),
-                        ha='center', va='center',
-                        color='white' if cm[i, j] > thresh else 'black')
         ax.set_title(title, fontweight='bold')
         ax.set_ylabel('True')
         ax.set_xlabel('Predicted')

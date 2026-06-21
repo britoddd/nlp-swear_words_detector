@@ -1,3 +1,14 @@
+---
+title: Detektor Kata Kasar Indonesia
+emoji: 🔍
+colorFrom: red
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.39.0
+app_file: app/app.py
+pinned: false
+---
+
 # 🔍 Indonesian Swear-Word & Hate-Speech Detector
 
 A multi-model NLP pipeline that classifies Indonesian text into **four levels of
