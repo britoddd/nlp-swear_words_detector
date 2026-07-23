@@ -19,11 +19,11 @@ Writes: saved_models/lr_model.pkl, lr_tfidf.pkl, nb_model.pkl,
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _train_core import (
+from pipeline.libs._train_core import (
     setup_logging, load_splits, build_tfidf_features,
     train_lr, train_nb, train_svm, save_models, logger,
 )
-from config import N_TRIALS_CLASSICAL
+from pipeline.libs.config import N_TRIALS_CLASSICAL
 
 if __name__ == '__main__':
     log_path = setup_logging('classical_training.log')

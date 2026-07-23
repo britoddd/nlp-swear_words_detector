@@ -8,11 +8,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from imblearn.over_sampling import SMOTE
 
-from _train_core import (
+from pipeline.libs._train_core import (
     setup_logging, load_splits, build_tfidf_features,
     train_lr, train_nb, train_svm, save_models, logger,
 )
-from config import RANDOM_STATE
+from pipeline.libs.config import RANDOM_STATE
 
 
 def apply_smote(X, y):

@@ -25,12 +25,12 @@ from sklearn.metrics import (
 )
 from tqdm.auto import tqdm
 
-from config import (
+from pipeline.libs.config import (
     OUTPUT_PATH, BERT_SAVE_PATH, OUTPUTS_DIR,
     LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
     MAX_LEN, BATCH_SIZE, device,
 )
-from data_loader import make_splits
+from pipeline.libs.data_loader import make_splits
 from train_bert import ProfanityDataset
 
 hf_logging.set_verbosity_error()

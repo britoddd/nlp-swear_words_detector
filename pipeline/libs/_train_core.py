@@ -16,12 +16,12 @@ from sklearn.metrics import f1_score, classification_report
 import pandas as pd
 from tqdm.auto import tqdm
 
-from config import (
+from pipeline.libs.config import (
     OUTPUT_PATH, MODELS_DIR, FORCE_RETRAIN,
     LR_MODEL_PATH, LR_TFIDF_PATH, NB_MODEL_PATH, NB_TFIDF_PATH, SVM_MODEL_PATH,
     RANDOM_STATE, N_TRIALS,
 )
-from data_loader import make_splits
+from pipeline.libs.data_loader import make_splits
 
 _ROOT     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOGS_DIR = os.path.join(_ROOT, 'logs')

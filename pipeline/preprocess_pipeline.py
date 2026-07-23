@@ -19,8 +19,8 @@ from tqdm.auto import tqdm
 nltk.download('punkt', quiet=True)
 nltk.download('punkt_tab', quiet=True)
 
-from config import OUTPUT_PATH, FORCE_RETRAIN
-from data_loader import load_dataset, load_lexicons
+from pipeline.libs.config import OUTPUT_PATH, FORCE_RETRAIN
+from pipeline.libs.data_loader import load_dataset, load_lexicons
 
 # ── Module-level singletons (initialised once on import) ───────
 _stemmer_factory = StemmerFactory()

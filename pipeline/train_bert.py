@@ -36,7 +36,7 @@ from sklearn.metrics import f1_score, classification_report
 from sklearn.utils import resample
 from tqdm.auto import tqdm
 
-from config import (
+from pipeline.libs.config import (
     OUTPUT_PATH, BERT_SAVE_PATH, INDOBERT_MODEL, FORCE_RETRAIN, OUTPUTS_DIR,
     MODELS_DIR, MAX_LEN, BATCH_SIZE, EPOCHS, RANDOM_STATE,
     N_TRIALS, TRIAL_EPOCHS, device,
@@ -45,7 +45,7 @@ from config import (
 # Local snapshot of the base model — downloaded once, reused every Optuna trial
 # so trials never depend on network access or HuggingFace cache availability.
 _BASE_MODEL_CACHE = os.path.join(MODELS_DIR, 'indobert_base_cached')
-from data_loader import make_splits
+from pipeline.libs.data_loader import make_splits
 
 hf_logging.set_verbosity_error()
 optuna.logging.set_verbosity(optuna.logging.WARNING)

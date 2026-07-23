@@ -10,11 +10,11 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 
-from _train_core import (
+from pipeline.libs._train_core import (
     setup_logging, build_tfidf_features,
     train_lr, train_nb, train_svm, save_models, logger,
 )
-from config import OUTPUT_PATH, TEST_SIZE, RANDOM_STATE
+from pipeline.libs.config import OUTPUT_PATH, TEST_SIZE, RANDOM_STATE
 
 
 def load_splits_with_oversample():

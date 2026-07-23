@@ -9,7 +9,7 @@ xlsx cannot be parsed.
 import zipfile
 import re
 from rapidfuzz import fuzz, process
-from config import LEXICON_PATH
+from pipeline.libs.config import LEXICON_PATH
 
 # Words with innocent dual meanings — excluded, handled contextually by IndoBERT
 AMBIGUOUS_WORDS = {'anjing', 'babi', 'gila', 'edan', 'kampung'}

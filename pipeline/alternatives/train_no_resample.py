@@ -6,11 +6,11 @@ Class imbalance handled solely by class_weight='balanced' in LR and SVM.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _train_core import (
+from pipeline.libs._train_core import (
     setup_logging, load_splits, build_tfidf_features,
     train_lr, train_nb, train_svm, save_models, logger,
 )
-from config import RANDOM_STATE
+from pipeline.libs.config import RANDOM_STATE
 
 if __name__ == '__main__':
     log_path = setup_logging('classical_no_resample.log')

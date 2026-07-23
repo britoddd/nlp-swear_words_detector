@@ -2,7 +2,7 @@
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from config import DATA_PATH, ABUSIVE_PATH, SLANG_PATH, RANDOM_STATE
+from pipeline.libs.config import DATA_PATH, ABUSIVE_PATH, SLANG_PATH, RANDOM_STATE
 
 
 def map_to_level(row) -> int:
