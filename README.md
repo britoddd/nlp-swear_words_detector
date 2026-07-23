@@ -1,15 +1,3 @@
----
-title: Detektor Kata Kasar Indonesia
-emoji: 🔍
-colorFrom: red
-colorTo: indigo
-sdk: streamlit
-sdk_version: 1.39.0
-python_version: "3.11"
-app_file: app/app.py
-pinned: false
----
-
 # 🔍 Indonesian Swear-Word & Hate-Speech Detector
 
 A multi-model NLP pipeline that classifies Indonesian text into **four levels of
@@ -18,9 +6,11 @@ against a fine-tuned IndoBERTweet transformer. Ships with an interactive
 Streamlit web app for live analysis, preprocessing visualisation, and lexicon-based
 censoring.
 
-> NLP course project — Group 10.
-
 ---
+
+## App Demo
+> Try the deployed swear word & hate speech detector here: [click on this link](https://huggingface.co/spaces/britod/swear-words-detector)\
+> or watch the [demo video](https://drive.google.com/drive/folders/17NRBhcIx0w8HfKoxa9bIJOY93ZJ0E-SC?usp=sharing) for further explanation
 
 ## Levels
 
@@ -64,7 +54,7 @@ across all four models.
 │   ├── train_*.py              #   resampling-strategy comparison variants
 │   ├── _train_core.py          #   shared classical-training logic
 │   └── evaluate.py             #   reports + confusion-matrix / comparison plots
-├── archive/                    # Source data & lexicons (Ibrohim & Budi, 2019)
+├── dataset/                    # Source data & lexicons (Ibrohim & Budi, 2019)
 ├── saved_models/               # Trained artefacts (gitignored)
 ├── outputs/                    # Generated plots & reports (gitignored)
 ├── dataset_processed.csv       # Preprocessed dataset
@@ -170,5 +160,5 @@ dataset from:
 > Detection in Indonesian Twitter.* In Proceedings of the Third Workshop on Abusive
 > Language Online (ACL). [W19-3506](https://www.aclweb.org/anthology/W19-3506.pdf)
 
-The accompanying *abusive* lexicon and *kamusalay* slang dictionary (in `archive/`)
+The accompanying *abusive* lexicon and *kamusalay* slang dictionary (in `dataset/`)
 are used for slang normalisation and lexicon-based censoring.

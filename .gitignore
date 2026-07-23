@@ -10,3 +10,6 @@ scrape
 /bert_training_history.png
 /confusion_matrices.png
 /model_comparison.png
+
+*.md 
+*.ipynb
