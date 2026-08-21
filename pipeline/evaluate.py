@@ -31,7 +31,7 @@ from pipeline.libs.config import (
     MAX_LEN, BATCH_SIZE, device,
 )
 from pipeline.libs.data_loader import make_splits
-from train_bert import ProfanityDataset
+from pipeline.train_bert import ProfanityDataset
 
 hf_logging.set_verbosity_error()
 

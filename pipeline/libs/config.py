@@ -1,13 +1,13 @@
 import os
 import torch
 
-# Project root is one level above this file (pipeline/)
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Repo root is two levels above this file (pipeline/libs/config.py -> pipeline/ -> repo root)
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── File paths ─────────────────────────────────────────────────
-DATA_PATH      = os.path.join(_ROOT, 'archive', 'data.csv')
-ABUSIVE_PATH   = os.path.join(_ROOT, 'archive', 'abusive.csv')
-SLANG_PATH     = os.path.join(_ROOT, 'archive', 'new_kamusalay.csv')
+DATA_PATH      = os.path.join(_ROOT, 'dataset', 'data.csv')
+ABUSIVE_PATH   = os.path.join(_ROOT, 'dataset', 'abusive.csv')
+SLANG_PATH     = os.path.join(_ROOT, 'dataset', 'new_kamusalay.csv')
 LEXICON_PATH   = os.path.join(_ROOT, 'paper', 'indonesian_swear_lexicon.xlsx')
 OUTPUT_PATH    = os.path.join(_ROOT, 'dataset_processed.csv')
 MODELS_DIR     = os.path.join(_ROOT, 'saved_models')

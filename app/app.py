@@ -9,7 +9,7 @@ from predictor import LEVEL_LABELS, ModelPredictor
 from preprocessing import TextPreprocessor
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # project root
-ARCHIVE_DIR = os.path.join(BASE_DIR, "archive")
+DATASET_DIR = os.path.join(BASE_DIR, "dataset")
 MODELS_DIR = os.path.join(BASE_DIR, "saved_models")
 
 st.set_page_config(
@@ -43,8 +43,8 @@ st.markdown(
 @st.cache_resource(show_spinner="Memuat model...")
 def load_resources():
     preprocessor = TextPreprocessor(
-        kamusalay_path=os.path.join(ARCHIVE_DIR, "new_kamusalay.csv"),
-        abusive_path=os.path.join(ARCHIVE_DIR, "abusive.csv"),
+        kamusalay_path=os.path.join(DATASET_DIR, "new_kamusalay.csv"),
+        abusive_path=os.path.join(DATASET_DIR, "abusive.csv"),
     )
     predictor = ModelPredictor(MODELS_DIR)
     return preprocessor, predictor
